@@ -1,4 +1,11 @@
-const { withSentryConfig } = require('@sentry/nextjs')
+let withSentryConfig
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  ; ({ withSentryConfig } = require('@sentry/nextjs'))
+} catch {
+  // @sentry/nextjs not installed — skip Sentry integration
+  withSentryConfig = null
+}
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -9,14 +16,14 @@ const nextConfig = {
     '0.0.0.0:3000',
     // 支持常见的局域网IP段
     '192.168.1.*:3000',
-    '192.168.0.*:3000', 
+    '192.168.0.*:3000',
     '192.168.101.*:3000',
     '10.0.0.*:3000',
     '172.16.*.*:3000',
     // 具体IP
     '192.168.101.5:3000'
   ],
-  
+
   // 🔄 重定向配置
   async redirects() {
     return [
@@ -28,7 +35,7 @@ const nextConfig = {
       },
       {
         source: '/register',
-        destination: '/auth/signup', 
+        destination: '/auth/signup',
         permanent: false, // 307 Temporary Redirect
       },
       // 永久重定向 - 页面结构调整 (301)
@@ -50,7 +57,7 @@ const nextConfig = {
       },
     ]
   },
-  
+
   // 图片配置
   images: {
     domains: [
@@ -59,7 +66,7 @@ const nextConfig = {
       "ext.same-assets.com",
       "ugc.same-assets.com",
       // R2存储域名
-      process.env.NEXT_PUBLIC_DEMO_VIDEOS_URL?.replace('https://', '') || 
+      process.env.NEXT_PUBLIC_DEMO_VIDEOS_URL?.replace('https://', '') ||
       "pub-49364ecf52e344d3a722a3c5bca11271.r2.dev",
     ],
     remotePatterns: [
@@ -92,24 +99,27 @@ const nextConfig = {
     // 图片优化配置
     minimumCacheTTL: 60,
   },
-  
+
   // 压缩配置
   compress: true,
 };
 
-module.exports = withSentryConfig(nextConfig, {
-  // Suppresses source map upload logs during build
-  silent: true,
+// 如果 @sentry/nextjs 可用则应用 Sentry 配置，否则导出原始配置
+module.exports = withSentryConfig
+  ? withSentryConfig(nextConfig, {
+    // Suppresses source map upload logs during build
+    silent: true,
 
-  // Upload source maps for better stack traces
-  widenClientFileUpload: true,
+    // Upload source maps for better stack traces
+    widenClientFileUpload: true,
 
-  // Automatically tree-shake Sentry logger statements
-  disableLogger: true,
+    // Automatically tree-shake Sentry logger statements
+    disableLogger: true,
 
-  // Hide source maps from generated client bundles
-  hideSourceMaps: true,
+    // Hide source maps from generated client bundles
+    hideSourceMaps: true,
 
-  // Only upload source maps when SENTRY_AUTH_TOKEN is set
-  authToken: process.env.SENTRY_AUTH_TOKEN,
-});
+    // Only upload source maps when SENTRY_AUTH_TOKEN is set
+    authToken: process.env.SENTRY_AUTH_TOKEN,
+  })
+  : nextConfig;

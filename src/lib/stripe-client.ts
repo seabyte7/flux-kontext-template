@@ -1,5 +1,6 @@
 import Stripe from "stripe";
-import { env } from '@/lib/env';
+import { env } from "@/lib/env";
+import { paymentLogger } from "@/lib/logger";
 
 // 🔥 Stripe客户端单例管理
 let stripeClient: Stripe | null = null;
@@ -30,7 +31,7 @@ export function getStripeClient(): Stripe {
     apiVersion: "2025-02-24.acacia",
   });
 
-  console.log("✅ Stripe客户端初始化成功");
+  paymentLogger.info("Stripe client initialized successfully");
   return stripeClient;
 }
 
@@ -50,4 +51,4 @@ export function isStripeAvailable(): boolean {
  */
 export function resetStripeClient(): void {
   stripeClient = null;
-} 
+}

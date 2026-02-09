@@ -77,6 +77,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [lint, typecheck, test]
     env:
+      # Skip t3-env validation with mock values
+      SKIP_ENV_VALIDATION: "true"
       # Mock required env vars for Next.js build
       FAL_KEY: "mock_fal_key_for_ci_build"
       NEXT_PUBLIC_SUPABASE_URL: "https://mock.supabase.co"

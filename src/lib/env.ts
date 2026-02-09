@@ -1,21 +1,25 @@
-import { createEnv } from '@t3-oss/env-nextjs'
-import { z } from 'zod'
+import { createEnv } from "@t3-oss/env-nextjs";
+import { z } from "zod";
 
 export const env = createEnv({
   // ─── Server-side environment variables ───
   server: {
     // 核心 AI 服务
-    FAL_KEY: z.string().min(1, 'FAL_KEY is required'),
+    FAL_KEY: z.string().min(1, "FAL_KEY is required"),
 
     // 数据库
-    SUPABASE_SERVICE_ROLE_KEY: z.string().min(1, 'SUPABASE_SERVICE_ROLE_KEY is required'),
+    SUPABASE_SERVICE_ROLE_KEY: z
+      .string()
+      .min(1, "SUPABASE_SERVICE_ROLE_KEY is required"),
     DATABASE_URL: z.string().optional(),
 
     // 认证
     NEXTAUTH_URL: z.string().url(),
-    NEXTAUTH_SECRET: z.string().min(32, 'NEXTAUTH_SECRET must be at least 32 characters'),
-    GOOGLE_ID: z.string().min(1, 'GOOGLE_ID is required'),
-    GOOGLE_SECRET: z.string().min(1, 'GOOGLE_SECRET is required'),
+    NEXTAUTH_SECRET: z
+      .string()
+      .min(32, "NEXTAUTH_SECRET must be at least 32 characters"),
+    GOOGLE_ID: z.string().min(1, "GOOGLE_ID is required"),
+    GOOGLE_SECRET: z.string().min(1, "GOOGLE_SECRET is required"),
     AUTH_GITHUB_ID: z.string().optional(),
     AUTH_GITHUB_SECRET: z.string().optional(),
 
@@ -67,49 +71,77 @@ export const env = createEnv({
     ADMIN_EMAILS: z.string().optional(),
     IPAPI_KEY: z.string().optional(),
 
+    // 内部 API
+    INTERNAL_API_SECRET: z.string().optional(),
+
+    // Sentry 错误监控
+    SENTRY_AUTH_TOKEN: z.string().optional(),
+
+    // Upstash Redis (分布式速率限制)
+    UPSTASH_REDIS_REST_URL: z.string().optional(),
+    UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
+
+    // 日志
+    LOG_LEVEL: z.string().optional(),
+
     // 环境
-    NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+    NODE_ENV: z
+      .enum(["development", "production", "test"])
+      .default("development"),
   },
 
   // ─── Client-side environment variables (NEXT_PUBLIC_*) ───
   client: {
     // Supabase
-    NEXT_PUBLIC_SUPABASE_URL: z.string().url('NEXT_PUBLIC_SUPABASE_URL must be a valid URL'),
-    NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1, 'NEXT_PUBLIC_SUPABASE_ANON_KEY is required'),
+    NEXT_PUBLIC_SUPABASE_URL: z
+      .string()
+      .url("NEXT_PUBLIC_SUPABASE_URL must be a valid URL"),
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: z
+      .string()
+      .min(1, "NEXT_PUBLIC_SUPABASE_ANON_KEY is required"),
 
     // 认证开关
-    NEXT_PUBLIC_AUTH_GOOGLE_ENABLED: z.string().optional().default('true'),
-    NEXT_PUBLIC_AUTH_GITHUB_ENABLED: z.string().optional().default('false'),
-    NEXT_PUBLIC_AUTH_CREDENTIALS_ENABLED: z.string().optional().default('false'),
+    NEXT_PUBLIC_AUTH_GOOGLE_ENABLED: z.string().optional().default("true"),
+    NEXT_PUBLIC_AUTH_GITHUB_ENABLED: z.string().optional().default("false"),
+    NEXT_PUBLIC_AUTH_CREDENTIALS_ENABLED: z
+      .string()
+      .optional()
+      .default("false"),
 
     // R2 存储开关
-    NEXT_PUBLIC_ENABLE_R2: z.string().optional().default('true'),
+    NEXT_PUBLIC_ENABLE_R2: z.string().optional().default("true"),
 
     // 演示资源
     NEXT_PUBLIC_DEMO_IMAGES_URL: z.string().optional(),
     NEXT_PUBLIC_DEMO_VIDEOS_URL: z.string().optional(),
 
     // Stripe
-    NEXT_PUBLIC_ENABLE_STRIPE: z.string().optional().default('false'),
+    NEXT_PUBLIC_ENABLE_STRIPE: z.string().optional().default("false"),
 
     // Creem
-    NEXT_PUBLIC_ENABLE_CREEM: z.string().optional().default('false'),
+    NEXT_PUBLIC_ENABLE_CREEM: z.string().optional().default("false"),
 
     // 支付系统
-    NEXT_PUBLIC_DEFAULT_PAYMENT_PROVIDER: z.string().optional().default('stripe'),
+    NEXT_PUBLIC_DEFAULT_PAYMENT_PROVIDER: z
+      .string()
+      .optional()
+      .default("stripe"),
     NEXT_PUBLIC_PAY_CANCEL_URL: z.string().optional(),
 
     // Turnstile
-    NEXT_PUBLIC_ENABLE_TURNSTILE: z.string().optional().default('false'),
+    NEXT_PUBLIC_ENABLE_TURNSTILE: z.string().optional().default("false"),
     NEXT_PUBLIC_TURNSTILE_SITE_KEY: z.string().optional(),
 
     // 内容安全
-    NEXT_PUBLIC_ENABLE_CONTENT_SAFETY: z.string().optional().default('false'),
+    NEXT_PUBLIC_ENABLE_CONTENT_SAFETY: z.string().optional().default("false"),
 
     // 站点配置
-    NEXT_PUBLIC_SITE_URL: z.string().optional().default('https://fluxkontext.space'),
+    NEXT_PUBLIC_SITE_URL: z
+      .string()
+      .optional()
+      .default("https://fluxkontext.space"),
     NEXT_PUBLIC_WEB_URL: z.string().optional(),
-    NEXT_PUBLIC_PROJECT_NAME: z.string().optional().default('Flux Kontext'),
+    NEXT_PUBLIC_PROJECT_NAME: z.string().optional().default("Flux Kontext"),
 
     // 分析
     NEXT_PUBLIC_GOOGLE_ANALYTICS_ID: z.string().optional(),
@@ -120,7 +152,10 @@ export const env = createEnv({
     NEXT_PUBLIC_CUSTOM_ANALYTICS_URL: z.string().optional(),
 
     // 主题
-    NEXT_PUBLIC_DEFAULT_THEME: z.string().optional().default('dark'),
+    NEXT_PUBLIC_DEFAULT_THEME: z.string().optional().default("dark"),
+
+    // Sentry 错误监控
+    NEXT_PUBLIC_SENTRY_DSN: z.string().optional(),
   },
 
   // ─── Runtime values mapping ───
@@ -165,34 +200,49 @@ export const env = createEnv({
     SMTP_PASS: process.env.SMTP_PASS,
     ADMIN_EMAILS: process.env.ADMIN_EMAILS,
     IPAPI_KEY: process.env.IPAPI_KEY,
+    INTERNAL_API_SECRET: process.env.INTERNAL_API_SECRET,
+    SENTRY_AUTH_TOKEN: process.env.SENTRY_AUTH_TOKEN,
+    UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
+    UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
+    LOG_LEVEL: process.env.LOG_LEVEL,
     NODE_ENV: process.env.NODE_ENV,
 
     // Client
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    NEXT_PUBLIC_AUTH_GOOGLE_ENABLED: process.env.NEXT_PUBLIC_AUTH_GOOGLE_ENABLED,
-    NEXT_PUBLIC_AUTH_GITHUB_ENABLED: process.env.NEXT_PUBLIC_AUTH_GITHUB_ENABLED,
-    NEXT_PUBLIC_AUTH_CREDENTIALS_ENABLED: process.env.NEXT_PUBLIC_AUTH_CREDENTIALS_ENABLED,
+    NEXT_PUBLIC_AUTH_GOOGLE_ENABLED:
+      process.env.NEXT_PUBLIC_AUTH_GOOGLE_ENABLED,
+    NEXT_PUBLIC_AUTH_GITHUB_ENABLED:
+      process.env.NEXT_PUBLIC_AUTH_GITHUB_ENABLED,
+    NEXT_PUBLIC_AUTH_CREDENTIALS_ENABLED:
+      process.env.NEXT_PUBLIC_AUTH_CREDENTIALS_ENABLED,
     NEXT_PUBLIC_ENABLE_R2: process.env.NEXT_PUBLIC_ENABLE_R2,
     NEXT_PUBLIC_DEMO_IMAGES_URL: process.env.NEXT_PUBLIC_DEMO_IMAGES_URL,
     NEXT_PUBLIC_DEMO_VIDEOS_URL: process.env.NEXT_PUBLIC_DEMO_VIDEOS_URL,
     NEXT_PUBLIC_ENABLE_STRIPE: process.env.NEXT_PUBLIC_ENABLE_STRIPE,
     NEXT_PUBLIC_ENABLE_CREEM: process.env.NEXT_PUBLIC_ENABLE_CREEM,
-    NEXT_PUBLIC_DEFAULT_PAYMENT_PROVIDER: process.env.NEXT_PUBLIC_DEFAULT_PAYMENT_PROVIDER,
+    NEXT_PUBLIC_DEFAULT_PAYMENT_PROVIDER:
+      process.env.NEXT_PUBLIC_DEFAULT_PAYMENT_PROVIDER,
     NEXT_PUBLIC_PAY_CANCEL_URL: process.env.NEXT_PUBLIC_PAY_CANCEL_URL,
     NEXT_PUBLIC_ENABLE_TURNSTILE: process.env.NEXT_PUBLIC_ENABLE_TURNSTILE,
     NEXT_PUBLIC_TURNSTILE_SITE_KEY: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
-    NEXT_PUBLIC_ENABLE_CONTENT_SAFETY: process.env.NEXT_PUBLIC_ENABLE_CONTENT_SAFETY,
+    NEXT_PUBLIC_ENABLE_CONTENT_SAFETY:
+      process.env.NEXT_PUBLIC_ENABLE_CONTENT_SAFETY,
     NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
     NEXT_PUBLIC_WEB_URL: process.env.NEXT_PUBLIC_WEB_URL,
     NEXT_PUBLIC_PROJECT_NAME: process.env.NEXT_PUBLIC_PROJECT_NAME,
-    NEXT_PUBLIC_GOOGLE_ANALYTICS_ID: process.env.NEXT_PUBLIC_GOOGLE_ANALYTICS_ID,
+    NEXT_PUBLIC_GOOGLE_ANALYTICS_ID:
+      process.env.NEXT_PUBLIC_GOOGLE_ANALYTICS_ID,
     NEXT_PUBLIC_PLAUSIBLE_DOMAIN: process.env.NEXT_PUBLIC_PLAUSIBLE_DOMAIN,
-    NEXT_PUBLIC_OPENPANEL_CLIENT_ID: process.env.NEXT_PUBLIC_OPENPANEL_CLIENT_ID,
+    NEXT_PUBLIC_OPENPANEL_CLIENT_ID:
+      process.env.NEXT_PUBLIC_OPENPANEL_CLIENT_ID,
     NEXT_PUBLIC_CLARITY_PROJECT_ID: process.env.NEXT_PUBLIC_CLARITY_PROJECT_ID,
-    NEXT_PUBLIC_CUSTOM_ANALYTICS_DOMAIN: process.env.NEXT_PUBLIC_CUSTOM_ANALYTICS_DOMAIN,
-    NEXT_PUBLIC_CUSTOM_ANALYTICS_URL: process.env.NEXT_PUBLIC_CUSTOM_ANALYTICS_URL,
+    NEXT_PUBLIC_CUSTOM_ANALYTICS_DOMAIN:
+      process.env.NEXT_PUBLIC_CUSTOM_ANALYTICS_DOMAIN,
+    NEXT_PUBLIC_CUSTOM_ANALYTICS_URL:
+      process.env.NEXT_PUBLIC_CUSTOM_ANALYTICS_URL,
     NEXT_PUBLIC_DEFAULT_THEME: process.env.NEXT_PUBLIC_DEFAULT_THEME,
+    NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
   },
 
   // Skip validation in edge runtime or during build on CI
@@ -200,4 +250,4 @@ export const env = createEnv({
 
   // Allow empty strings for optional variables
   emptyStringAsUndefined: true,
-})
+});

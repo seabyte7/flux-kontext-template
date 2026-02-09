@@ -1,76 +1,76 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState } from "react";
 
 interface User {
-  id: string
-  email: string
-  name: string
-  image: string
-  credits: number
-  signin_provider: string
-  signin_count: number
-  last_signin_at: string
-  created_at: string
+  id: string;
+  email: string;
+  name: string;
+  image: string;
+  credits: number;
+  signin_provider: string;
+  signin_count: number;
+  last_signin_at: string;
+  created_at: string;
 }
 
 export default function AdminUsersPage() {
-  const [users, setUsers] = useState<User[]>([])
-  const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(1)
-  const [search, setSearch] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [editingUser, setEditingUser] = useState<string | null>(null)
-  const [editCredits, setEditCredits] = useState('')
+  const [users, setUsers] = useState<User[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [editingUser, setEditingUser] = useState<string | null>(null);
+  const [editCredits, setEditCredits] = useState("");
 
   const fetchUsers = (p: number, q: string) => {
-    setLoading(true)
-    const params = new URLSearchParams({ page: String(p), limit: '20' })
-    if (q) params.set('search', q)
+    setLoading(true);
+    const params = new URLSearchParams({ page: String(p), limit: "20" });
+    if (q) params.set("search", q);
 
     fetch(`/api/admin/users?${params}`)
       .then((res) => res.json())
       .then((res) => {
         if (res.success) {
-          setUsers(res.data.users)
-          setTotal(res.data.total)
-          setTotalPages(res.data.totalPages)
+          setUsers(res.data.users);
+          setTotal(res.data.total);
+          setTotalPages(res.data.totalPages);
         }
       })
       .catch(console.error)
-      .finally(() => setLoading(false))
-  }
+      .finally(() => setLoading(false));
+  };
 
   useEffect(() => {
-    fetchUsers(page, search)
-  }, [page])
+    fetchUsers(page, search);
+  }, [page, search]);
 
   const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault()
-    setPage(1)
-    fetchUsers(1, search)
-  }
+    e.preventDefault();
+    setPage(1);
+    fetchUsers(1, search);
+  };
 
   const handleUpdateCredits = async (userId: string) => {
-    const credits = parseInt(editCredits)
-    if (isNaN(credits) || credits < 0) return
+    const credits = parseInt(editCredits);
+    if (isNaN(credits) || credits < 0) return;
 
-    const res = await fetch('/api/admin/users', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+    const res = await fetch("/api/admin/users", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, credits }),
-    })
-    const result = await res.json()
+    });
+    const result = await res.json();
 
     if (result.success) {
       setUsers((prev) =>
-        prev.map((u) => (u.id === userId ? { ...u, credits } : u))
-      )
-      setEditingUser(null)
-      setEditCredits('')
+        prev.map((u) => (u.id === userId ? { ...u, credits } : u)),
+      );
+      setEditingUser(null);
+      setEditCredits("");
     }
-  }
+  };
 
   return (
     <div className="space-y-6">
@@ -104,22 +104,38 @@ export default function AdminUsersPage() {
               <thead className="border-b border-zinc-800 bg-zinc-900/80">
                 <tr>
                   <th className="px-4 py-3 font-medium text-zinc-400">User</th>
-                  <th className="px-4 py-3 font-medium text-zinc-400">Provider</th>
-                  <th className="px-4 py-3 font-medium text-zinc-400">Credits</th>
-                  <th className="px-4 py-3 font-medium text-zinc-400">Sign-ins</th>
-                  <th className="px-4 py-3 font-medium text-zinc-400">Last Active</th>
-                  <th className="px-4 py-3 font-medium text-zinc-400">Registered</th>
-                  <th className="px-4 py-3 font-medium text-zinc-400">Actions</th>
+                  <th className="px-4 py-3 font-medium text-zinc-400">
+                    Provider
+                  </th>
+                  <th className="px-4 py-3 font-medium text-zinc-400">
+                    Credits
+                  </th>
+                  <th className="px-4 py-3 font-medium text-zinc-400">
+                    Sign-ins
+                  </th>
+                  <th className="px-4 py-3 font-medium text-zinc-400">
+                    Last Active
+                  </th>
+                  <th className="px-4 py-3 font-medium text-zinc-400">
+                    Registered
+                  </th>
+                  <th className="px-4 py-3 font-medium text-zinc-400">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800">
                 {users.map((user) => (
                   <tr key={user.id} className="hover:bg-zinc-800/50">
                     <td className="px-4 py-3">
-                      <p className="font-medium text-zinc-200">{user.name || '-'}</p>
+                      <p className="font-medium text-zinc-200">
+                        {user.name || "-"}
+                      </p>
                       <p className="text-xs text-zinc-500">{user.email}</p>
                     </td>
-                    <td className="px-4 py-3 text-zinc-400">{user.signin_provider || '-'}</td>
+                    <td className="px-4 py-3 text-zinc-400">
+                      {user.signin_provider || "-"}
+                    </td>
                     <td className="px-4 py-3">
                       {editingUser === user.id ? (
                         <div className="flex items-center gap-2">
@@ -144,14 +160,18 @@ export default function AdminUsersPage() {
                           </button>
                         </div>
                       ) : (
-                        <span className="text-zinc-300">{user.credits ?? 0}</span>
+                        <span className="text-zinc-300">
+                          {user.credits ?? 0}
+                        </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-zinc-400">{user.signin_count || 0}</td>
+                    <td className="px-4 py-3 text-zinc-400">
+                      {user.signin_count || 0}
+                    </td>
                     <td className="px-4 py-3 text-zinc-500 text-xs">
                       {user.last_signin_at
                         ? new Date(user.last_signin_at).toLocaleString()
-                        : '-'}
+                        : "-"}
                     </td>
                     <td className="px-4 py-3 text-zinc-500 text-xs">
                       {new Date(user.created_at).toLocaleDateString()}
@@ -160,8 +180,8 @@ export default function AdminUsersPage() {
                       {editingUser !== user.id && (
                         <button
                           onClick={() => {
-                            setEditingUser(user.id)
-                            setEditCredits(String(user.credits ?? 0))
+                            setEditingUser(user.id);
+                            setEditCredits(String(user.credits ?? 0));
                           }}
                           className="rounded bg-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-600"
                         >
@@ -200,5 +220,5 @@ export default function AdminUsersPage() {
         </>
       )}
     </div>
-  )
+  );
 }

@@ -1,33 +1,35 @@
-import { getServerSession } from 'next-auth'
-import { redirect } from 'next/navigation'
-import { authOptions } from '@/lib/auth'
-import type { Metadata } from 'next'
+import { getServerSession } from "next-auth";
+import { redirect } from "next/navigation";
+import Link from "next/link";
+import { authOptions } from "@/lib/auth";
+import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: 'Admin Panel',
+  title: "Admin Panel",
   robots: { index: false, follow: false },
-}
+};
 
 async function verifyAdmin() {
-  const session = await getServerSession(authOptions)
+  const session = await getServerSession(authOptions);
   if (!session?.user?.email) {
-    redirect('/auth/signin')
+    redirect("/auth/signin");
   }
 
-  const adminEmails = process.env.ADMIN_EMAILS?.split(',').map((e) => e.trim()) || []
+  const adminEmails =
+    process.env.ADMIN_EMAILS?.split(",").map((e) => e.trim()) || [];
   if (!adminEmails.includes(session.user.email)) {
-    redirect('/')
+    redirect("/");
   }
 
-  return session
+  return session;
 }
 
 export default async function AdminLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
-  const session = await verifyAdmin()
+  const session = await verifyAdmin();
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
@@ -35,44 +37,46 @@ export default async function AdminLayout({
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex h-14 items-center justify-between">
             <div className="flex items-center gap-6">
-              <a href="/admin" className="text-lg font-semibold text-white">
+              <Link href="/admin" className="text-lg font-semibold text-white">
                 Admin Panel
-              </a>
+              </Link>
               <div className="hidden sm:flex items-center gap-1">
-                <a
+                <Link
                   href="/admin"
                   className="rounded-md px-3 py-1.5 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
                 >
                   Dashboard
-                </a>
-                <a
+                </Link>
+                <Link
                   href="/admin/users"
                   className="rounded-md px-3 py-1.5 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
                 >
                   Users
-                </a>
-                <a
+                </Link>
+                <Link
                   href="/admin/orders"
                   className="rounded-md px-3 py-1.5 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
                 >
                   Orders
-                </a>
-                <a
+                </Link>
+                <Link
                   href="/admin/settings"
                   className="rounded-md px-3 py-1.5 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
                 >
                   Settings
-                </a>
+                </Link>
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <span className="text-sm text-zinc-500">{session.user.email}</span>
-              <a
+              <span className="text-sm text-zinc-500">
+                {session.user.email}
+              </span>
+              <Link
                 href="/"
                 className="rounded-md px-3 py-1.5 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
               >
                 Back to Site
-              </a>
+              </Link>
             </div>
           </div>
         </div>
@@ -81,5 +85,5 @@ export default async function AdminLayout({
         {children}
       </main>
     </div>
-  )
+  );
 }
