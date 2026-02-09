@@ -1,29 +1,24 @@
 import { fal } from "@fal-ai/client";
 import { r2Storage } from "@/lib/services/r2-storage";
+import { fluxLogger } from "@/lib/logger";
 
 // 配置FAL客户端
 if (process.env.FAL_KEY) {
   fal.config({
     credentials: process.env.FAL_KEY
   });
-  console.log(`✅ FAL client configured with key: ${process.env.FAL_KEY.substring(0, 10)}...`);
-  
+  fluxLogger.info({ keyPrefix: process.env.FAL_KEY.substring(0, 10) }, 'FAL client configured');
+
   // 🔍 验证FAL客户端配置
   try {
     const keyLength = process.env.FAL_KEY.length;
     const keyPrefix = process.env.FAL_KEY.substring(0, 4);
-    console.log(`🔍 FAL key validation:`, {
-      keyLength,
-      keyPrefix,
-      isValidLength: keyLength > 20,
-      hasValidPrefix: keyPrefix.includes('fal') || keyPrefix.includes('key')
-    });
+    fluxLogger.debug({ keyLength, keyPrefix, isValidLength: keyLength > 20 }, 'FAL key validation');
   } catch (keyError) {
-    console.error('❌ FAL key validation error:', keyError);
+    fluxLogger.error({ err: keyError }, 'FAL key validation error');
   }
 } else {
-  console.error('❌ FAL_KEY environment variable not found');
-  console.error('🔍 Available environment variables:', Object.keys(process.env).filter(key => key.includes('FAL')));
+  fluxLogger.error('FAL_KEY environment variable not found');
 }
 
 // 定义API端点常量 - 🔧 根据FAL API官方文档完全修复端点
@@ -109,69 +104,30 @@ export class FluxKontextService {
         // ❌ 移除 aspect_ratio - Kontext API不支持此参数
       };
 
-      console.log(`🚀 Starting editImagePro with input:`, {
-        prompt: input.prompt?.substring(0, 100) + '...',
-        image_url: input.image_url?.substring(0, 50) + '...',
-        removed_aspect_ratio: input.aspect_ratio, // 记录被移除的参数
-        seed: input.seed,
-        guidance_scale: input.guidance_scale,
-        num_images: input.num_images,
-        safety_tolerance: input.safety_tolerance,
-        output_format: input.output_format,
-        endpoint: FLUX_ENDPOINTS.KONTEXT_PRO,
-        cleanedInput: JSON.stringify(kontextInput).substring(0, 300) + '...'
-      });
-
-      console.log(`📡 Calling fal.subscribe for endpoint: ${FLUX_ENDPOINTS.KONTEXT_PRO}`);
+      fluxLogger.info({ endpoint: FLUX_ENDPOINTS.KONTEXT_PRO, prompt: input.prompt?.substring(0, 100) }, 'Starting editImagePro');
       
       const result = await fal.subscribe(FLUX_ENDPOINTS.KONTEXT_PRO, {
-        input: kontextInput, // 🔧 使用清理后的输入参数
+        input: kontextInput,
         logs: true,
         onQueueUpdate: (update) => {
-          console.log(`📊 Queue update:`, {
-            status: update.status,
-            position: (update as any).queue_position,
-            logs: (update as any).logs?.map((log: any) => log.message).join(", ")
-          });
-          if (update.status === "IN_PROGRESS") {
-            console.log("Generation progress:", (update as any).logs?.map((log: any) => log.message).join("\n"));
-          }
+          fluxLogger.debug({ status: update.status, position: (update as any).queue_position }, 'Queue update');
         },
       });
 
-      console.log(`📋 FAL subscribe result:`, {
-        hasData: !!result.data,
-        dataType: typeof result.data,
-        hasImages: !!result.data?.images,
-        imagesCount: result.data?.images?.length || 0,
-        requestId: (result as any).requestId,
-        fullResultKeys: result ? Object.keys(result) : [],
-        dataKeys: result.data ? Object.keys(result.data) : [],
-        firstImageUrl: result.data?.images?.[0]?.url?.substring(0, 50) + '...' || 'N/A',
-        resultStringified: JSON.stringify(result).substring(0, 500) + '...'
-      });
+      fluxLogger.debug({ hasData: !!result.data, imagesCount: result.data?.images?.length || 0 }, 'FAL subscribe result');
 
       if (!result.data) {
-        console.error('❌ FAL subscribe returned no data:', {
-          fullResult: result,
-          resultKeys: Object.keys(result),
-          resultStringified: JSON.stringify(result)
-        });
+        fluxLogger.error('FAL subscribe returned no data');
         throw new Error('FAL API returned no data - this may indicate a service issue or invalid request');
       }
 
-      // 🔍 检查data结构
       if (!result.data.images) {
-        console.error('❌ FAL subscribe data has no images:', {
-          dataKeys: Object.keys(result.data),
-          dataStringified: JSON.stringify(result.data)
-        });
-        
-        // 🔍 尝试查找其他可能的图片字段
+        fluxLogger.error({ dataKeys: Object.keys(result.data) }, 'FAL subscribe data has no images');
+
         const possibleFields = ['image', 'output', 'result'];
         for (const field of possibleFields) {
           if ((result.data as any)[field]) {
-            console.log(`🔍 Found potential images in data.${field}:`, (result.data as any)[field]);
+            fluxLogger.debug({ field }, 'Found potential images in alternate field');
             if (Array.isArray((result.data as any)[field])) {
               (result.data as any).images = (result.data as any)[field];
               break;
@@ -181,7 +137,7 @@ export class FluxKontextService {
             }
           }
         }
-        
+
         if (!result.data.images) {
           throw new Error('FAL API returned data without images field');
         }
@@ -189,14 +145,7 @@ export class FluxKontextService {
 
       return result.data as FluxKontextResult;
     } catch (error) {
-      console.error("❌ Flux Kontext Pro editing error:", {
-        error: error instanceof Error ? error.message : error,
-        stack: error instanceof Error ? error.stack : undefined,
-        input: {
-          prompt: input.prompt?.substring(0, 100) + '...',
-          image_url: input.image_url?.substring(0, 50) + '...'
-        }
-      });
+      fluxLogger.error({ err: error, prompt: input.prompt?.substring(0, 100) }, 'Flux Kontext Pro editing error');
       throw error;
     }
   }
@@ -207,7 +156,6 @@ export class FluxKontextService {
    */
   static async editImageMax(input: FluxKontextImageEditInput): Promise<FluxKontextResult> {
     try {
-      // 🔧 根据API文档，移除不支持的aspect_ratio参数
       const kontextInput = {
         prompt: input.prompt,
         image_url: input.image_url,
@@ -216,42 +164,20 @@ export class FluxKontextService {
         num_images: input.num_images,
         safety_tolerance: input.safety_tolerance,
         output_format: input.output_format
-        // ❌ 移除 aspect_ratio - Kontext API不支持此参数
       };
 
-      console.log(`🚀 Starting editImageMax with input:`, {
-        prompt: input.prompt?.substring(0, 100) + '...',
-        image_url: input.image_url?.substring(0, 50) + '...',
-        removed_aspect_ratio: input.aspect_ratio, // 记录被移除的参数
-        seed: input.seed,
-        guidance_scale: input.guidance_scale,
-        num_images: input.num_images,
-        safety_tolerance: input.safety_tolerance,
-        output_format: input.output_format,
-        endpoint: FLUX_ENDPOINTS.KONTEXT_MAX,
-        cleanedInput: JSON.stringify(kontextInput).substring(0, 300) + '...'
-      });
+      fluxLogger.info({ endpoint: FLUX_ENDPOINTS.KONTEXT_MAX, prompt: input.prompt?.substring(0, 100) }, 'Starting editImageMax');
 
       const result = await fal.subscribe(FLUX_ENDPOINTS.KONTEXT_MAX, {
-        input: kontextInput, // 🔧 使用清理后的输入参数
+        input: kontextInput,
         logs: true,
         onQueueUpdate: (update) => {
-          if (update.status === "IN_PROGRESS") {
-            console.log("Generation progress:", update.logs?.map(log => log.message).join("\n"));
-          }
+          fluxLogger.debug({ status: update.status }, 'Queue update');
         },
       });
       return result.data as FluxKontextResult;
     } catch (error) {
-      console.error("❌ Flux Kontext Max editing error:", {
-        error: error instanceof Error ? error.message : error,
-        stack: error instanceof Error ? error.stack : undefined,
-        input: {
-          prompt: input.prompt?.substring(0, 100) + '...',
-          image_url: input.image_url?.substring(0, 50) + '...',
-          removed_aspect_ratio: input.aspect_ratio
-        }
-      });
+      fluxLogger.error({ err: error, prompt: input.prompt?.substring(0, 100) }, 'Flux Kontext Max editing error');
       throw error;
     }
   }
@@ -262,7 +188,6 @@ export class FluxKontextService {
    */
   static async editMultiImageMax(input: FluxKontextMultiImageInput): Promise<FluxKontextResult> {
     try {
-      // 🔧 根据API文档，移除不支持的aspect_ratio参数
       const kontextInput = {
         prompt: input.prompt,
         image_urls: input.image_urls,
@@ -271,42 +196,20 @@ export class FluxKontextService {
         num_images: input.num_images,
         safety_tolerance: input.safety_tolerance,
         output_format: input.output_format
-        // ❌ 移除 aspect_ratio - Kontext API不支持此参数
       };
 
-      console.log(`🚀 Starting editMultiImageMax with input:`, {
-        prompt: input.prompt?.substring(0, 100) + '...',
-        image_urls_count: input.image_urls?.length || 0,
-        removed_aspect_ratio: input.aspect_ratio, // 记录被移除的参数
-        seed: input.seed,
-        guidance_scale: input.guidance_scale,
-        num_images: input.num_images,
-        safety_tolerance: input.safety_tolerance,
-        output_format: input.output_format,
-        endpoint: FLUX_ENDPOINTS.KONTEXT_MAX_MULTI,
-        cleanedInput: JSON.stringify(kontextInput).substring(0, 300) + '...'
-      });
+      fluxLogger.info({ endpoint: FLUX_ENDPOINTS.KONTEXT_MAX_MULTI, prompt: input.prompt?.substring(0, 100), imageCount: input.image_urls?.length }, 'Starting editMultiImageMax');
 
       const result = await fal.subscribe(FLUX_ENDPOINTS.KONTEXT_MAX_MULTI, {
-        input: kontextInput, // 🔧 使用清理后的输入参数
+        input: kontextInput,
         logs: true,
         onQueueUpdate: (update) => {
-          if (update.status === "IN_PROGRESS") {
-            console.log("Generation progress:", update.logs?.map(log => log.message).join("\n"));
-          }
+          fluxLogger.debug({ status: update.status }, 'Queue update');
         },
       });
       return result.data as FluxKontextResult;
     } catch (error) {
-      console.error("❌ Flux Kontext Max multi-image editing error:", {
-        error: error instanceof Error ? error.message : error,
-        stack: error instanceof Error ? error.stack : undefined,
-        input: {
-          prompt: input.prompt?.substring(0, 100) + '...',
-          image_urls_count: input.image_urls?.length || 0,
-          removed_aspect_ratio: input.aspect_ratio
-        }
-      });
+      fluxLogger.error({ err: error, prompt: input.prompt?.substring(0, 100) }, 'Flux Kontext Max multi-image editing error');
       throw error;
     }
   }
@@ -330,68 +233,32 @@ export class FluxKontextService {
         image_size: this.convertAspectRatioToImageSize(input.aspect_ratio)
       };
 
-      console.log(`🚀 Starting textToImageMax with converted input:`, {
-        prompt: input.prompt?.substring(0, 100) + '...',
-        original_aspect_ratio: input.aspect_ratio,
-        converted_image_size: fluxInput.image_size,
-        seed: input.seed,
-        guidance_scale: input.guidance_scale,
-        num_images: input.num_images,
-        safety_tolerance: input.safety_tolerance,
-        output_format: input.output_format,
-        endpoint: FLUX_ENDPOINTS.FLUX_MAX_TEXT_TO_IMAGE
-      });
+      fluxLogger.info({ endpoint: FLUX_ENDPOINTS.FLUX_MAX_TEXT_TO_IMAGE, prompt: input.prompt?.substring(0, 100) }, 'Starting textToImageMax');
 
-      console.log(`📡 Calling fal.subscribe for endpoint: ${FLUX_ENDPOINTS.FLUX_MAX_TEXT_TO_IMAGE}`);
-      
       const result = await fal.subscribe(FLUX_ENDPOINTS.FLUX_MAX_TEXT_TO_IMAGE, {
         input: fluxInput,
         logs: true,
         onQueueUpdate: (update) => {
-          console.log(`📊 Queue update:`, {
-            status: update.status,
-            position: (update as any).queue_position,
-            logs: (update as any).logs?.map((log: any) => log.message).join(", ")
-          });
-          if (update.status === "IN_PROGRESS") {
-            console.log("Generation progress:", (update as any).logs?.map((log: any) => log.message).join("\n"));
-          }
+          fluxLogger.debug({ status: update.status, position: (update as any).queue_position }, 'Queue update');
         },
       });
 
-      console.log(`📋 FAL subscribe result:`, {
-        hasData: !!result.data,
-        dataType: typeof result.data,
-        hasImages: !!result.data?.images,
-        imagesCount: result.data?.images?.length || 0,
-        requestId: (result as any).requestId,
-        fullResultKeys: result ? Object.keys(result) : [],
-        dataKeys: result.data ? Object.keys(result.data) : [],
-        firstImageUrl: result.data?.images?.[0]?.url?.substring(0, 50) + '...' || 'N/A',
-        resultStringified: JSON.stringify(result).substring(0, 500) + '...'
-      });
+      fluxLogger.debug({ hasData: !!result.data, imagesCount: result.data?.images?.length || 0 }, 'FAL subscribe result');
 
       if (!result.data) {
-        console.error('❌ FAL subscribe returned no data:', {
-          fullResult: result,
-          resultKeys: Object.keys(result),
-          resultStringified: JSON.stringify(result)
-        });
+        fluxLogger.error('FAL subscribe returned no data');
         throw new Error('FAL API returned no data - this may indicate a service issue or invalid request');
       }
 
       // 🔍 检查data结构
       if (!result.data.images) {
-        console.error('❌ FAL subscribe data has no images:', {
-          dataKeys: Object.keys(result.data),
-          dataStringified: JSON.stringify(result.data)
-        });
-        
+        fluxLogger.error({ dataKeys: Object.keys(result.data) }, 'FAL subscribe data has no images');
+
         // 🔍 尝试查找其他可能的图片字段
         const possibleFields = ['image', 'output', 'result'];
         for (const field of possibleFields) {
           if ((result.data as any)[field]) {
-            console.log(`🔍 Found potential images in data.${field}:`, (result.data as any)[field]);
+            fluxLogger.debug({ field }, 'Found potential images in alternate field');
             if (Array.isArray((result.data as any)[field])) {
               (result.data as any).images = (result.data as any)[field];
               break;
@@ -409,14 +276,7 @@ export class FluxKontextService {
 
       return result.data as FluxKontextResult;
     } catch (error) {
-      console.error("❌ Flux Max text-to-image error:", {
-        error: error instanceof Error ? error.message : error,
-        stack: error instanceof Error ? error.stack : undefined,
-        input: {
-          prompt: input.prompt?.substring(0, 100) + '...',
-          aspect_ratio: input.aspect_ratio
-        }
-      });
+      fluxLogger.error({ err: error, prompt: input.prompt?.substring(0, 100) }, 'Flux Max text-to-image error');
       throw error;
     }
   }
@@ -439,39 +299,18 @@ export class FluxKontextService {
         // ❌ 移除 aspect_ratio - Kontext API不支持此参数
       };
 
-      console.log(`🚀 Starting editMultiImagePro with input:`, {
-        prompt: input.prompt?.substring(0, 100) + '...',
-        image_urls_count: input.image_urls?.length || 0,
-        removed_aspect_ratio: input.aspect_ratio, // 记录被移除的参数
-        seed: input.seed,
-        guidance_scale: input.guidance_scale,
-        num_images: input.num_images,
-        safety_tolerance: input.safety_tolerance,
-        output_format: input.output_format,
-        endpoint: FLUX_ENDPOINTS.KONTEXT_PRO_MULTI,
-        cleanedInput: JSON.stringify(kontextInput).substring(0, 300) + '...'
-      });
+      fluxLogger.info({ endpoint: FLUX_ENDPOINTS.KONTEXT_PRO_MULTI, prompt: input.prompt?.substring(0, 100), imageCount: input.image_urls?.length }, 'Starting editMultiImagePro');
 
       const result = await fal.subscribe(FLUX_ENDPOINTS.KONTEXT_PRO_MULTI, {
-        input: kontextInput, // 🔧 使用清理后的输入参数
+        input: kontextInput,
         logs: true,
         onQueueUpdate: (update) => {
-          if (update.status === "IN_PROGRESS") {
-            console.log("Generation progress:", update.logs?.map(log => log.message).join("\n"));
-          }
+          fluxLogger.debug({ status: update.status }, 'Queue update');
         },
       });
       return result.data as FluxKontextResult;
     } catch (error) {
-      console.error("❌ Flux Kontext Pro multi-image editing error:", {
-        error: error instanceof Error ? error.message : error,
-        stack: error instanceof Error ? error.stack : undefined,
-        input: {
-          prompt: input.prompt?.substring(0, 100) + '...',
-          image_urls_count: input.image_urls?.length || 0,
-          removed_aspect_ratio: input.aspect_ratio
-        }
-      });
+      fluxLogger.error({ err: error, prompt: input.prompt?.substring(0, 100) }, 'Flux Kontext Pro multi-image editing error');
       throw error;
     }
   }
@@ -495,68 +334,32 @@ export class FluxKontextService {
         image_size: this.convertAspectRatioToImageSize(input.aspect_ratio)
       };
 
-      console.log(`🚀 Starting textToImagePro with converted input:`, {
-        prompt: input.prompt?.substring(0, 100) + '...',
-        original_aspect_ratio: input.aspect_ratio,
-        converted_image_size: fluxInput.image_size,
-        seed: input.seed,
-        guidance_scale: input.guidance_scale,
-        num_images: input.num_images,
-        safety_tolerance: input.safety_tolerance,
-        output_format: input.output_format,
-        endpoint: FLUX_ENDPOINTS.FLUX_PRO_TEXT_TO_IMAGE
-      });
+      fluxLogger.info({ endpoint: FLUX_ENDPOINTS.FLUX_PRO_TEXT_TO_IMAGE, prompt: input.prompt?.substring(0, 100) }, 'Starting textToImagePro');
 
-      console.log(`📡 Calling fal.subscribe for endpoint: ${FLUX_ENDPOINTS.FLUX_PRO_TEXT_TO_IMAGE}`);
-      
       const result = await fal.subscribe(FLUX_ENDPOINTS.FLUX_PRO_TEXT_TO_IMAGE, {
         input: fluxInput,
         logs: true,
         onQueueUpdate: (update) => {
-          console.log(`📊 Queue update:`, {
-            status: update.status,
-            position: (update as any).queue_position,
-            logs: (update as any).logs?.map((log: any) => log.message).join(", ")
-          });
-          if (update.status === "IN_PROGRESS") {
-            console.log("Generation progress:", (update as any).logs?.map((log: any) => log.message).join("\n"));
-          }
+          fluxLogger.debug({ status: update.status, position: (update as any).queue_position }, 'Queue update');
         },
       });
 
-      console.log(`📋 FAL subscribe result:`, {
-        hasData: !!result.data,
-        dataType: typeof result.data,
-        hasImages: !!result.data?.images,
-        imagesCount: result.data?.images?.length || 0,
-        requestId: (result as any).requestId,
-        fullResultKeys: result ? Object.keys(result) : [],
-        dataKeys: result.data ? Object.keys(result.data) : [],
-        firstImageUrl: result.data?.images?.[0]?.url?.substring(0, 50) + '...' || 'N/A',
-        resultStringified: JSON.stringify(result).substring(0, 500) + '...'
-      });
+      fluxLogger.debug({ hasData: !!result.data, imagesCount: result.data?.images?.length || 0 }, 'FAL subscribe result');
 
       if (!result.data) {
-        console.error('❌ FAL subscribe returned no data:', {
-          fullResult: result,
-          resultKeys: Object.keys(result),
-          resultStringified: JSON.stringify(result)
-        });
+        fluxLogger.error('FAL subscribe returned no data');
         throw new Error('FAL API returned no data - this may indicate a service issue or invalid request');
       }
 
       // 🔍 检查data结构
       if (!result.data.images) {
-        console.error('❌ FAL subscribe data has no images:', {
-          dataKeys: Object.keys(result.data),
-          dataStringified: JSON.stringify(result.data)
-        });
-        
+        fluxLogger.error({ dataKeys: Object.keys(result.data) }, 'FAL subscribe data has no images');
+
         // 🔍 尝试查找其他可能的图片字段
         const possibleFields = ['image', 'output', 'result'];
         for (const field of possibleFields) {
           if ((result.data as any)[field]) {
-            console.log(`🔍 Found potential images in data.${field}:`, (result.data as any)[field]);
+            fluxLogger.debug({ field }, 'Found potential images in alternate field');
             if (Array.isArray((result.data as any)[field])) {
               (result.data as any).images = (result.data as any)[field];
               break;
@@ -574,14 +377,7 @@ export class FluxKontextService {
 
       return result.data as FluxKontextResult;
     } catch (error) {
-      console.error("❌ Flux Pro text-to-image error:", {
-        error: error instanceof Error ? error.message : error,
-        stack: error instanceof Error ? error.stack : undefined,
-        input: {
-          prompt: input.prompt?.substring(0, 100) + '...',
-          aspect_ratio: input.aspect_ratio
-        }
-      });
+      fluxLogger.error({ err: error, prompt: input.prompt?.substring(0, 100) }, 'Flux Pro text-to-image error');
       throw error;
     }
   }
@@ -592,18 +388,17 @@ export class FluxKontextService {
    */
   static async uploadFile(file: File): Promise<string> {
     try {
-      console.log("📤 Starting dual storage upload:", file.name);
-      
-      // 🔧 优先上传到FAL存储（确保API兼容性）
+      fluxLogger.info({ fileName: file.name }, 'Starting dual storage upload');
+
       let falUrl: string | null = null;
       let r2Url: string | null = null;
-      
+
       try {
-        console.log("📤 Uploading to FAL storage (primary):", file.name);
+        fluxLogger.debug({ fileName: file.name }, 'Uploading to FAL storage (primary)');
         falUrl = await fal.storage.upload(file);
-        console.log("✅ FAL upload successful:", falUrl);
+        fluxLogger.info({ falUrl }, 'FAL upload successful');
       } catch (falError) {
-        console.error("❌ FAL upload failed:", falError);
+        fluxLogger.error({ err: falError }, 'FAL upload failed');
       }
       
       // 🔧 同时尝试上传到R2存储（备份和用户查看）
@@ -615,32 +410,29 @@ export class FluxKontextService {
 
       if (isR2Enabled && hasR2Config) {
         try {
-          console.log("📤 Uploading to R2 storage (backup):", file.name);
+          fluxLogger.debug({ fileName: file.name }, 'Uploading to R2 storage (backup)');
           r2Url = await r2Storage.uploadFile(file);
-          console.log("✅ R2 upload successful:", r2Url);
+          fluxLogger.info({ r2Url }, 'R2 upload successful');
         } catch (r2Error) {
-          console.warn("⚠️ R2 upload failed (non-critical):", r2Error);
+          fluxLogger.warn({ err: r2Error }, 'R2 upload failed (non-critical)');
         }
       } else {
-        console.log("ℹ️ R2 storage not configured, skipping R2 upload");
+        fluxLogger.debug('R2 storage not configured, skipping R2 upload');
       }
       
       // 🔧 优先返回FAL URL，如果FAL失败则返回R2 URL
       if (falUrl) {
-        console.log("🎯 Using FAL URL as primary:", falUrl);
-        if (r2Url) {
-          console.log("📋 R2 URL available as backup:", r2Url);
-        }
+        fluxLogger.info({ falUrl }, 'Using FAL URL as primary');
         return falUrl;
       } else if (r2Url) {
-        console.log("🎯 FAL failed, using R2 URL as fallback:", r2Url);
+        fluxLogger.info({ r2Url }, 'FAL failed, using R2 URL as fallback');
         return r2Url;
       } else {
         throw new Error("Both FAL and R2 storage uploads failed");
       }
       
     } catch (error) {
-      console.error("❌ Dual storage upload failed:", error);
+      fluxLogger.error({ err: error }, 'Dual storage upload failed');
       throw error;
     }
   }
@@ -660,20 +452,20 @@ export class FluxKontextService {
                          process.env.R2_BUCKET_NAME;
 
       if (!isR2Enabled || !hasR2Config) {
-        console.log("ℹ️ R2 storage not configured, returning original URL");
+        fluxLogger.debug('R2 storage not configured, returning original URL');
         return imageUrl; // 如果R2未配置，返回原始URL
       }
 
-      console.log("📤 Saving AI generated image to R2:", imageUrl);
-      
+      fluxLogger.debug({ imageUrl }, 'Saving AI generated image to R2');
+
       // 使用R2存储的uploadFromUrl方法
       const result = await r2Storage.uploadFromUrl(imageUrl, prompt);
-      
-      console.log("✅ AI generated image saved to R2 successfully:", result);
+
+      fluxLogger.info({ result }, 'AI generated image saved to R2 successfully');
       return result;
-      
+
     } catch (error) {
-      console.error("❌ Failed to save AI generated image to R2:", error);
+      fluxLogger.error({ err: error }, 'Failed to save AI generated image to R2');
       // 如果保存失败，返回原始URL
       return imageUrl;
     }
@@ -690,7 +482,7 @@ export class FluxKontextService {
       });
       return result;
     } catch (error) {
-      console.error("Queue submission error:", error);
+      fluxLogger.error({ err: error }, 'Queue submission error');
       throw error;
     }
   }
@@ -706,7 +498,7 @@ export class FluxKontextService {
       });
       return status;
     } catch (error) {
-      console.error("Queue status check error:", error);
+      fluxLogger.error({ err: error }, 'Queue status check error');
       throw error;
     }
   }
@@ -721,7 +513,7 @@ export class FluxKontextService {
       });
       return result.data as FluxKontextResult;
     } catch (error) {
-      console.error("Queue result retrieval error:", error);
+      fluxLogger.error({ err: error }, 'Queue result retrieval error');
       throw error;
     }
   }
@@ -745,25 +537,18 @@ export class FluxKontextService {
         num_inference_steps: 4
       };
 
-      console.log(`🚀 Starting textToImageSchnell with converted input:`, {
-        prompt: input.prompt?.substring(0, 100) + '...',
-        original_aspect_ratio: input.aspect_ratio,
-        converted_image_size: schnellInput.image_size,
-        endpoint: FLUX_ENDPOINTS.FLUX_SCHNELL
-      });
+      fluxLogger.info({ endpoint: FLUX_ENDPOINTS.FLUX_SCHNELL, prompt: input.prompt?.substring(0, 100) }, 'Starting textToImageSchnell');
 
       const result = await fal.subscribe(FLUX_ENDPOINTS.FLUX_SCHNELL, {
         input: schnellInput,
         logs: true,
         onQueueUpdate: (update) => {
-          if (update.status === "IN_PROGRESS") {
-            console.log("Generation progress:", update.logs?.map(log => log.message).join("\n"));
-          }
+          fluxLogger.debug({ status: update.status }, 'Queue update');
         },
       });
       return result.data as FluxKontextResult;
     } catch (error) {
-      console.error("Flux Schnell text-to-image error:", error);
+      fluxLogger.error({ err: error }, 'Flux Schnell text-to-image error');
       throw error;
     }
   }
@@ -787,25 +572,18 @@ export class FluxKontextService {
         image_size: this.convertAspectRatioToImageSize(input.aspect_ratio)
       };
 
-      console.log(`🚀 Starting textToImageDev with converted input:`, {
-        prompt: input.prompt?.substring(0, 100) + '...',
-        original_aspect_ratio: input.aspect_ratio,
-        converted_image_size: fluxInput.image_size,
-        endpoint: FLUX_ENDPOINTS.FLUX_GENERAL
-      });
+      fluxLogger.info({ endpoint: FLUX_ENDPOINTS.FLUX_GENERAL, prompt: input.prompt?.substring(0, 100) }, 'Starting textToImageDev');
 
       const result = await fal.subscribe(FLUX_ENDPOINTS.FLUX_GENERAL, {
         input: fluxInput,
         logs: true,
         onQueueUpdate: (update) => {
-          if (update.status === "IN_PROGRESS") {
-            console.log("Generation progress:", update.logs?.map(log => log.message).join("\n"));
-          }
+          fluxLogger.debug({ status: update.status }, 'Queue update');
         },
       });
       return result.data as FluxKontextResult;
     } catch (error) {
-      console.error("Flux Dev text-to-image error:", error);
+      fluxLogger.error({ err: error }, 'Flux Dev text-to-image error');
       throw error;
     }
   }
@@ -836,24 +614,18 @@ export class FluxKontextService {
         ]
       };
 
-      console.log(`🚀 Starting textToImageRealism with LoRA:`, {
-        prompt: input.prompt?.substring(0, 100) + '...',
-        endpoint: FLUX_ENDPOINTS.FLUX_GENERAL,
-        loras: realismInput.loras
-      });
+      fluxLogger.info({ endpoint: FLUX_ENDPOINTS.FLUX_GENERAL, prompt: input.prompt?.substring(0, 100) }, 'Starting textToImageRealism');
       
       const result = await fal.subscribe(FLUX_ENDPOINTS.FLUX_GENERAL, {
         input: realismInput,
         logs: true,
         onQueueUpdate: (update) => {
-          if (update.status === "IN_PROGRESS") {
-            console.log("Generation progress:", update.logs?.map(log => log.message).join("\n"));
-          }
+          fluxLogger.debug({ status: update.status }, 'Queue update');
         },
       });
       return result.data as FluxKontextResult;
     } catch (error) {
-      console.error("Flux Realism text-to-image error:", error);
+      fluxLogger.error({ err: error }, 'Flux Realism text-to-image error');
       throw error;
     }
   }
@@ -884,24 +656,18 @@ export class FluxKontextService {
         ]
       };
 
-      console.log(`🚀 Starting textToImageAnime with LoRA:`, {
-        prompt: input.prompt?.substring(0, 100) + '...',
-        endpoint: FLUX_ENDPOINTS.FLUX_GENERAL,
-        loras: animeInput.loras
-      });
+      fluxLogger.info({ endpoint: FLUX_ENDPOINTS.FLUX_GENERAL, prompt: input.prompt?.substring(0, 100) }, 'Starting textToImageAnime');
       
       const result = await fal.subscribe(FLUX_ENDPOINTS.FLUX_GENERAL, {
         input: animeInput,
         logs: true,
         onQueueUpdate: (update) => {
-          if (update.status === "IN_PROGRESS") {
-            console.log("Generation progress:", update.logs?.map(log => log.message).join("\n"));
-          }
+          fluxLogger.debug({ status: update.status }, 'Queue update');
         },
       });
       return result.data as FluxKontextResult;
     } catch (error) {
-      console.error("Flux Anime text-to-image error:", error);
+      fluxLogger.error({ err: error }, 'Flux Anime text-to-image error');
       throw error;
     }
   }

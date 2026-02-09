@@ -1,4 +1,5 @@
 import Stripe from "stripe";
+import { env } from '@/lib/env';
 
 // 🔥 Stripe客户端单例管理
 let stripeClient: Stripe | null = null;
@@ -12,23 +13,23 @@ export function getStripeClient(): Stripe {
   if (stripeClient) {
     return stripeClient;
   }
-  
+
   // 检查Stripe是否启用
-  if (process.env.NEXT_PUBLIC_ENABLE_STRIPE !== "true") {
+  if (env.NEXT_PUBLIC_ENABLE_STRIPE !== "true") {
     throw new Error("Stripe支付未启用");
   }
-  
+
   // 检查环境变量
-  const privateKey = process.env.STRIPE_PRIVATE_KEY;
+  const privateKey = env.STRIPE_PRIVATE_KEY;
   if (!privateKey) {
     throw new Error("STRIPE_PRIVATE_KEY environment variable is not set");
   }
-  
+
   // 创建并缓存客户端实例
   stripeClient = new Stripe(privateKey, {
     apiVersion: "2025-02-24.acacia",
   });
-  
+
   console.log("✅ Stripe客户端初始化成功");
   return stripeClient;
 }
@@ -38,9 +39,9 @@ export function getStripeClient(): Stripe {
  */
 export function isStripeAvailable(): boolean {
   return !!(
-    process.env.NEXT_PUBLIC_ENABLE_STRIPE === "true" &&
-    process.env.STRIPE_PRIVATE_KEY &&
-    process.env.STRIPE_PUBLIC_KEY
+    env.NEXT_PUBLIC_ENABLE_STRIPE === "true" &&
+    env.STRIPE_PRIVATE_KEY &&
+    env.STRIPE_PUBLIC_KEY
   );
 }
 

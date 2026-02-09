@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/database'
 import crypto from 'crypto'
+import { paymentLogger } from '@/lib/logger'
 
 // 🔒 标准价格表 - 服务器端权威价格源
 export const STANDARD_PRICING = {
@@ -100,25 +101,14 @@ export async function validatePrice(request: PriceValidationRequest): Promise<Pr
   try {
     const { productType, productId, billingCycle, amount, currency, userId } = request
 
-    console.log('🔍 开始价格验证，原始参数:', {
-      productType,
-      productId,
-      billingCycle,
-      amount,
-      currency
-    })
+    paymentLogger.info({ productType, productId, billingCycle, amount, currency }, 'Price validation started')
 
     // 🔧 将CREEM产品ID映射为内部产品ID
     const mappingResult = mapCreemProductIdToInternal(productType, productId, billingCycle)
     const internalProductId = mappingResult.internalProductId
     const internalBillingCycle = mappingResult.internalBillingCycle || billingCycle
 
-    console.log('🔄 产品ID映射结果:', {
-      originalProductId: productId,
-      internalProductId,
-      originalBillingCycle: billingCycle,
-      internalBillingCycle
-    })
+    paymentLogger.debug({ originalProductId: productId, internalProductId, originalBillingCycle: billingCycle, internalBillingCycle }, 'Product ID mapping result')
 
     // 🔍 获取标准价格
     let expectedPrice: number
@@ -198,7 +188,7 @@ export async function validatePrice(request: PriceValidationRequest): Promise<Pr
     })
 
     // 📊 记录价格验证日志
-    console.log(`💰 Price validation result - Product: ${productType}/${internalProductId}, Expected: $${expectedPrice}, Actual: $${actualAmountInDollars} (${amount} cents), Valid: ${isValid}, Free plan: ${expectedPrice === 0}`)
+    paymentLogger.info({ productType, internalProductId, expectedPrice, actualAmountInDollars, amountCents: amount, isValid, freePlan: expectedPrice === 0 }, 'Price validation result')
 
     return {
       isValid,
@@ -210,7 +200,7 @@ export async function validatePrice(request: PriceValidationRequest): Promise<Pr
     }
 
   } catch (error) {
-    console.error('Price validation failed:', error)
+    paymentLogger.error({ err: error }, 'Price validation failed')
     return {
       isValid: false,
       expectedPrice: 0,
@@ -223,8 +213,23 @@ export async function validatePrice(request: PriceValidationRequest): Promise<Pr
 }
 
 // 🔐 生成验证哈希
+const PAYMENT_VALIDATION_SECRET_MIN_LENGTH = 32
+
+function getPaymentValidationSecret(): string {
+  const secret = process.env.PAYMENT_VALIDATION_SECRET
+
+  if (!secret || secret.length < PAYMENT_VALIDATION_SECRET_MIN_LENGTH) {
+    throw new Error(
+      `PAYMENT_VALIDATION_SECRET must be set and at least ${PAYMENT_VALIDATION_SECRET_MIN_LENGTH} characters`
+    )
+  }
+
+  return secret
+}
+
+// 🔐 生成验证哈希
 export function generateValidationHash(data: any): string {
-  const secret = process.env.PAYMENT_VALIDATION_SECRET || 'default-secret-key'
+  const secret = getPaymentValidationSecret()
   const payload = JSON.stringify(data)
   return crypto.createHmac('sha256', secret).update(payload).digest('hex')
 }
@@ -255,12 +260,7 @@ export async function checkDuplicateOrder(
     if (productType) {
       const mappingResult = mapCreemProductIdToInternal(productType, productId, billingCycle)
       searchProductId = mappingResult.internalProductId
-      console.log('🔄 Duplicate order check - Product ID mapping:', {
-        originalProductId: productId,
-        searchProductId,
-        amountInCents: amount,
-        amountInDollars
-      })
+      paymentLogger.debug({ originalProductId: productId, searchProductId, amountInCents: amount, amountInDollars }, 'Duplicate order check - Product ID mapping')
     }
     
     // 🔧 使用Supabase替代Prisma
@@ -280,7 +280,7 @@ export async function checkDuplicateOrder(
       .single()
 
     if (error && error.code !== 'PGRST116') { // PGRST116 = No rows found
-      console.error('Duplicate order check failed:', error)
+      paymentLogger.error({ err: error }, 'Duplicate order check failed')
       return { isDuplicate: false }
     }
 
@@ -289,7 +289,7 @@ export async function checkDuplicateOrder(
       existingOrder
     }
   } catch (error) {
-    console.error('Duplicate order check failed:', error)
+    paymentLogger.error({ err: error }, 'Duplicate order check failed')
     return { isDuplicate: false }
   }
 }
@@ -314,7 +314,7 @@ export async function checkPaymentRateLimit(
       .in('status', ['pending', 'created', 'completed'])
 
     if (error) {
-      console.error('支付频率检查失败:', error)
+      paymentLogger.error({ err: error }, 'Payment rate limit check failed')
       return { isAllowed: true, currentCount: 0 }
     }
 
@@ -324,7 +324,7 @@ export async function checkPaymentRateLimit(
       currentCount
     }
   } catch (error) {
-    console.error('支付频率检查失败:', error)
+    paymentLogger.error({ err: error }, 'Payment rate limit check failed')
     return { isAllowed: true, currentCount: 0 }
   }
 }
@@ -389,7 +389,7 @@ export async function validateOrderIntegrity(orderId: string): Promise<{
     }
 
   } catch (error) {
-    console.error('订单完整性验证失败:', error)
+    paymentLogger.error({ err: error }, 'Order integrity validation failed')
     return {
       isValid: false,
       error: '订单验证系统错误'
@@ -420,35 +420,21 @@ export async function performSecurityChecks(request: PriceValidationRequest): Pr
   const warnings: string[] = []
 
   try {
-    console.log('🔒 开始执行支付安全检查...', {
-      productType: request.productType,
-      productId: request.productId,
-      amount: request.amount,
-      currency: request.currency,
-      userId: request.userId
-    })
+    paymentLogger.info({ productType: request.productType, productId: request.productId, amount: request.amount, currency: request.currency, userId: request.userId }, 'Starting payment security checks')
 
     // 1️⃣ 价格验证
-    console.log('🔍 1️⃣ 执行价格验证...')
+    paymentLogger.debug('Executing price validation')
     const priceValidation = await validatePrice(request)
     if (!priceValidation.isValid) {
       const errorMsg = `Price validation failed: ${priceValidation.error}`
-      console.error('❌ Price validation failed:', {
-        expected: priceValidation.expectedPrice,
-        actual: priceValidation.actualPrice,
-        error: priceValidation.error
-      })
+      paymentLogger.error({ expected: priceValidation.expectedPrice, actual: priceValidation.actualPrice, error: priceValidation.error }, 'Price validation failed')
       errors.push(errorMsg)
     } else {
-      console.log('✅ Price validation passed:', {
-        expected: priceValidation.expectedPrice,
-        actual: priceValidation.actualPrice,
-        credits: priceValidation.credits
-      })
+      paymentLogger.info({ expected: priceValidation.expectedPrice, actual: priceValidation.actualPrice, credits: priceValidation.credits }, 'Price validation passed')
     }
 
     // 2️⃣ 重复订单检查
-    console.log('🔍 2️⃣ 执行重复订单检查...')
+    paymentLogger.debug('Executing duplicate order check')
     const duplicateCheck = await checkDuplicateOrder(
       request.userId,
       request.amount,
@@ -458,36 +444,25 @@ export async function performSecurityChecks(request: PriceValidationRequest): Pr
     )
     if (duplicateCheck.isDuplicate) {
       const warningMsg = 'Potential duplicate order detected'
-      console.warn('⚠️ Duplicate order detection:', {
-        userId: request.userId,
-        amount: request.amount,
-        productId: request.productId,
-        existingOrder: duplicateCheck.existingOrder?.id
-      })
+      paymentLogger.warn({ userId: request.userId, amount: request.amount, productId: request.productId, existingOrder: duplicateCheck.existingOrder?.id }, 'Duplicate order detected')
       warnings.push(warningMsg)
     } else {
-      console.log('✅ Duplicate order check passed')
+      paymentLogger.debug('Duplicate order check passed')
     }
 
     // 3️⃣ 支付频率限制
-    console.log('🔍 3️⃣ 执行支付频率检查...')
+    paymentLogger.debug('Executing payment rate limit check')
     const rateLimitCheck = await checkPaymentRateLimit(request.userId)
     if (!rateLimitCheck.isAllowed) {
       const errorMsg = `Payment rate limit exceeded: ${rateLimitCheck.currentCount} payments in the last hour`
-      console.error('❌ Payment rate limit exceeded:', {
-        userId: request.userId,
-        currentCount: rateLimitCheck.currentCount,
-        maxAllowed: 10
-      })
+      paymentLogger.error({ userId: request.userId, currentCount: rateLimitCheck.currentCount, maxAllowed: 10 }, 'Payment rate limit exceeded')
       errors.push(errorMsg)
     } else {
-      console.log('✅ Payment rate limit check passed:', {
-        currentCount: rateLimitCheck.currentCount
-      })
+      paymentLogger.debug({ currentCount: rateLimitCheck.currentCount }, 'Payment rate limit check passed')
     }
 
     // 4️⃣ 用户存在性验证
-    console.log('🔍 4️⃣ 执行用户存在性验证...')
+    paymentLogger.debug('Executing user existence verification')
     
     // 🔧 使用Supabase替代Prisma，确保数据库访问一致性
     const { createAdminClient } = await import('@/lib/supabase/server')
@@ -502,26 +477,14 @@ export async function performSecurityChecks(request: PriceValidationRequest): Pr
     
     if (userError || !user) {
       const errorMsg = 'User does not exist'
-      console.error('❌ User does not exist:', {
-        userId: request.userId,
-        error: userError?.message
-      })
+      paymentLogger.error({ userId: request.userId, error: userError?.message }, 'User does not exist')
       errors.push(errorMsg)
     } else {
-      console.log('✅ User existence verification passed:', {
-        userId: user.id,
-        email: user.email
-      })
+      paymentLogger.debug({ userId: user.id, email: user.email }, 'User existence verification passed')
     }
 
     const passed = errors.length === 0
-    console.log(`🔒 Payment security check completed - Result: ${passed ? 'Passed' : 'Failed'}`, {
-      passed,
-      errorsCount: errors.length,
-      warningsCount: warnings.length,
-      errors: errors.length > 0 ? errors : undefined,
-      warnings: warnings.length > 0 ? warnings : undefined
-    })
+    paymentLogger.info({ passed, errorsCount: errors.length, warningsCount: warnings.length, errors: errors.length > 0 ? errors : undefined, warnings: warnings.length > 0 ? warnings : undefined }, 'Payment security check completed')
 
     return {
       passed,
@@ -530,7 +493,7 @@ export async function performSecurityChecks(request: PriceValidationRequest): Pr
     }
 
   } catch (error) {
-    console.error('❌ Security check system error:', error)
+    paymentLogger.error({ err: error }, 'Security check system error')
     return {
       passed: false,
       errors: ['Security check system error'],

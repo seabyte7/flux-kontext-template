@@ -7,6 +7,8 @@ import SessionProvider from "@/components/providers/SessionProvider";
 import { GoogleOneTap } from "@/components/GoogleOneTap";
 import { GoogleOneTapTrigger } from "@/components/GoogleOneTapTrigger";
 import { StructuredData } from "@/components/StructuredData";
+// Trigger env validation on app startup
+import "@/lib/env";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",

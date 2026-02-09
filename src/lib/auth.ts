@@ -8,39 +8,41 @@ import { getUuid } from "@/lib/utils/hash"
 import { saveUser } from "@/lib/services/user"
 import { User } from "@/lib/types/user"
 import { createClient } from '@supabase/supabase-js'
+import { authLogger } from '@/lib/logger'
+import { env } from '@/lib/env'
 
 const providers: any[] = []
 
 // Google Auth (如果配置了)
 if (
-  process.env.NEXT_PUBLIC_AUTH_GOOGLE_ENABLED === "true" &&
-  process.env.GOOGLE_ID &&
-  process.env.GOOGLE_SECRET
+  env.NEXT_PUBLIC_AUTH_GOOGLE_ENABLED === "true" &&
+  env.GOOGLE_ID &&
+  env.GOOGLE_SECRET
 ) {
   providers.push(
     GoogleProvider({
-      clientId: process.env.GOOGLE_ID,
-      clientSecret: process.env.GOOGLE_SECRET,
+      clientId: env.GOOGLE_ID,
+      clientSecret: env.GOOGLE_SECRET,
     })
   )
 }
 
 // Github Auth (如果配置了)
 if (
-  process.env.NEXT_PUBLIC_AUTH_GITHUB_ENABLED === "true" &&
-  process.env.AUTH_GITHUB_ID &&
-  process.env.AUTH_GITHUB_SECRET
+  env.NEXT_PUBLIC_AUTH_GITHUB_ENABLED === "true" &&
+  env.AUTH_GITHUB_ID &&
+  env.AUTH_GITHUB_SECRET
 ) {
   providers.push(
     GitHubProvider({
-      clientId: process.env.AUTH_GITHUB_ID,
-      clientSecret: process.env.AUTH_GITHUB_SECRET,
+      clientId: env.AUTH_GITHUB_ID,
+      clientSecret: env.AUTH_GITHUB_SECRET,
     })
   )
 }
 
 // 🔥 简化的邮箱登录 - 只使用Supabase认证
-if (process.env.NEXT_PUBLIC_AUTH_CREDENTIALS_ENABLED === "true") {
+if (env.NEXT_PUBLIC_AUTH_CREDENTIALS_ENABLED === "true") {
   providers.push(
     CredentialsProvider({
       id: "credentials",
@@ -55,8 +57,8 @@ if (process.env.NEXT_PUBLIC_AUTH_CREDENTIALS_ENABLED === "true") {
         }
 
         // 🎯 开发环境测试账户（无需数据库）
-        if (process.env.NODE_ENV === 'development' && 
-            credentials.email === "test@example.com" && 
+        if (env.NODE_ENV === 'development' &&
+            credentials.email === "test@example.com" &&
             credentials.password === "password") {
           return {
             id: "test-user-id",
@@ -68,8 +70,8 @@ if (process.env.NEXT_PUBLIC_AUTH_CREDENTIALS_ENABLED === "true") {
         // 🚀 生产环境：使用Supabase认证（自带邮箱验证）
         try {
           const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!
+            env.NEXT_PUBLIC_SUPABASE_URL,
+            env.SUPABASE_SERVICE_ROLE_KEY
           )
 
           // 🔐 Supabase登录验证（自动检查邮箱验证状态）
@@ -79,18 +81,18 @@ if (process.env.NEXT_PUBLIC_AUTH_CREDENTIALS_ENABLED === "true") {
           })
 
           if (error) {
-            console.log('登录失败:', error.message)
+            authLogger.warn({ error: error.message }, 'Login failed')
             return null
           }
 
           if (!data.user) {
-            console.log('用户不存在')
+            authLogger.warn('User not found')
             return null
           }
 
           // ✅ 检查邮箱验证状态
           if (!data.user.email_confirmed_at) {
-            console.log('邮箱未验证')
+            authLogger.warn({ email: credentials.email }, 'Email not verified')
             return null
           }
 
@@ -102,7 +104,7 @@ if (process.env.NEXT_PUBLIC_AUTH_CREDENTIALS_ENABLED === "true") {
           }
 
         } catch (error) {
-          console.error('Supabase认证错误:', error)
+          authLogger.error({ err: error }, 'Supabase auth error')
           return null
         }
       },
@@ -133,8 +135,8 @@ export const authOptions: NextAuthOptions = {
         httpOnly: true,
         sameSite: 'lax',        // 🔧 设置为lax而非strict，支持第三方登录
         path: '/',
-        secure: process.env.NODE_ENV === 'production',
-        domain: process.env.NODE_ENV === 'production' ? 'fluxkontext.space' : undefined, // 🌐 明确指定域名
+        secure: env.NODE_ENV === 'production',
+        domain: env.NODE_ENV === 'production' ? 'fluxkontext.space' : undefined, // 🌐 明确指定域名
       },
     },
     callbackUrl: {
@@ -142,8 +144,8 @@ export const authOptions: NextAuthOptions = {
       options: {
         sameSite: 'lax',        // 🔧 支持跨站点回调
         path: '/',
-        secure: process.env.NODE_ENV === 'production',
-        domain: process.env.NODE_ENV === 'production' ? 'fluxkontext.space' : undefined,
+        secure: env.NODE_ENV === 'production',
+        domain: env.NODE_ENV === 'production' ? 'fluxkontext.space' : undefined,
       },
     },
     csrfToken: {
@@ -152,8 +154,8 @@ export const authOptions: NextAuthOptions = {
         httpOnly: true,
         sameSite: 'lax',        // 🔧 支持CSRF保护但允许第三方登录
         path: '/',
-        secure: process.env.NODE_ENV === 'production',
-        domain: process.env.NODE_ENV === 'production' ? 'fluxkontext.space' : undefined,
+        secure: env.NODE_ENV === 'production',
+        domain: env.NODE_ENV === 'production' ? 'fluxkontext.space' : undefined,
       },
     },
     // 🔧 添加状态Cookie配置以支持Google One Tap
@@ -163,9 +165,9 @@ export const authOptions: NextAuthOptions = {
         httpOnly: true,
         sameSite: 'lax',
         path: '/',
-        secure: process.env.NODE_ENV === 'production',
+        secure: env.NODE_ENV === 'production',
         maxAge: 900, // 15分钟
-        domain: process.env.NODE_ENV === 'production' ? 'fluxkontext.space' : undefined,
+        domain: env.NODE_ENV === 'production' ? 'fluxkontext.space' : undefined,
       },
     },
     pkceCodeVerifier: {
@@ -174,35 +176,31 @@ export const authOptions: NextAuthOptions = {
         httpOnly: true,
         sameSite: 'lax',
         path: '/',
-        secure: process.env.NODE_ENV === 'production',
+        secure: env.NODE_ENV === 'production',
         maxAge: 900, // 15分钟
-        domain: process.env.NODE_ENV === 'production' ? 'fluxkontext.space' : undefined,
+        domain: env.NODE_ENV === 'production' ? 'fluxkontext.space' : undefined,
       },
     },
   },
   callbacks: {
     async signIn({ user, account, profile }) {
       // 🎯 处理用户登录和首次注册赠送积分
-      console.log('🔍 signIn回调触发:', { 
-        user: user, 
-        account: account?.provider, 
-        profile: profile?.email 
-      })
-      
+      authLogger.info({ userId: user?.id, provider: account?.provider, email: profile?.email }, 'signIn callback triggered')
+
       try {
         if (user?.email) {
-          console.log('🔍 开始处理用户:', user.email)
-          
+          authLogger.debug({ email: user.email }, 'Processing user login')
+
           // 🔧 使用Supabase替代Prisma，确保数据库访问一致性
           const { createAdminClient } = await import('@/lib/supabase/server')
           const { getUuid } = await import('@/lib/utils/hash')
-          
-          console.log('🔍 Supabase模块导入成功')
-          
+
+          authLogger.debug('Supabase module imported')
+
           const supabase = createAdminClient()
-          
+
           // 检查用户是否已存在
-          console.log('🔍 查询现有用户...')
+          authLogger.debug('Querying existing user')
           const { data: existingUser, error: findError } = await supabase
             .from('users')
             .select('*')
@@ -210,11 +208,11 @@ export const authOptions: NextAuthOptions = {
             .limit(1)
             .single()
           
-          console.log('🔍 查询结果:', existingUser ? '用户已存在' : '用户不存在')
+          authLogger.debug({ exists: !!existingUser }, 'User query result')
 
           if (findError && findError.code === 'PGRST116') {
             // 用户不存在，创建新用户
-            console.log('🎁 开始创建新用户...')
+            authLogger.info({ email: user.email }, 'Creating new user')
             
             const newUserData = {
               id: user.id || getUuid(),
@@ -240,10 +238,10 @@ export const authOptions: NextAuthOptions = {
               .single()
 
             if (createError) {
-              console.error('🚨 新用户创建失败:', createError)
+              authLogger.error({ err: createError }, 'New user creation failed')
               // 即使创建失败，也允许用户登录，后续通过API自动创建
             } else {
-              console.log('🎉 新用户创建成功:', newUser.id)
+              authLogger.info({ userId: newUser.id }, 'New user created successfully')
 
               // 🎁 创建积分赠送记录
               try {
@@ -257,14 +255,28 @@ export const authOptions: NextAuthOptions = {
                     description: '新用户注册赠送积分',
                     reference_id: 'welcome_bonus'
                   })
-                
-                console.log(`🎁 新用户注册成功，赠送100积分: ${user.email}`)
+
+                authLogger.info({ email: user.email, credits: 100 }, 'Welcome bonus credits granted')
               } catch (creditError) {
-                console.error('⚠️ 积分记录创建失败:', creditError)
+                authLogger.error({ err: creditError }, 'Credit transaction creation failed')
+              }
+
+              // 📧 发送欢迎邮件（异步，不阻塞登录流程）
+              try {
+                const { sendWelcomeEmail } = await import('@/lib/email')
+                sendWelcomeEmail({
+                  to: user.email!,
+                  name: user.name || user.email!,
+                }).catch((emailError) => {
+                  authLogger.error({ err: emailError }, 'Welcome email send failed')
+                })
+                authLogger.info({ email: user.email }, 'Welcome email triggered')
+              } catch (emailError) {
+                authLogger.error({ err: emailError }, 'Welcome email module load failed')
               }
             }
           } else if (!findError && existingUser) {
-            console.log('🔄 更新现有用户登录信息...')
+            authLogger.debug({ userId: existingUser.id }, 'Updating existing user login info')
             
             // 🔄 现有用户：更新登录信息
             const updateData = {
@@ -280,19 +292,19 @@ export const authOptions: NextAuthOptions = {
               .update(updateData)
               .eq('id', existingUser.id)
             
-            console.log('✅ 现有用户登录信息更新完成')
+            authLogger.debug({ userId: existingUser.id }, 'Existing user login info updated')
           } else {
-            console.error('🚨 数据库查询异常:', findError)
+            authLogger.error({ err: findError }, 'Database query error')
           }
         } else {
-          console.log('⚠️ 用户邮箱为空，跳过数据库操作')
+          authLogger.warn('User email is empty, skipping database operations')
         }
       } catch (error) {
-        console.error('❌ 用户登录处理失败:', error)
+        authLogger.error({ err: error }, 'User login processing failed')
         // 即使数据库操作失败，也允许用户登录
       }
 
-      console.log('✅ signIn回调完成，返回true')
+      authLogger.debug('signIn callback completed')
       return true
     },
     async redirect({ url, baseUrl }) {
@@ -340,7 +352,7 @@ async function detectUserLocation(): Promise<string> {
     // 暂时返回默认值，实际项目中可以集成 ipapi.co 等服务
     return "US" // 默认为美国
   } catch (error) {
-    console.error("地理位置检测失败:", error)
+    authLogger.error({ err: error }, 'Geolocation detection failed')
     return "US"
   }
 } 
